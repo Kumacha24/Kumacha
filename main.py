@@ -1,8 +1,9 @@
 import random
 import os
+import readchar
 
-FIELD_WIDTH = 64
-FIELD_HEIGHT = 64
+FIELD_WIDTH = 32
+FIELD_HEIGHT = 32
 
 AREA_MAX = 64
 AREA_SIZE_MIN = 16
@@ -16,6 +17,9 @@ CELL_TYPE = {"NONE": "．",
              "PLAYER": "＠",
              "ENEMY": "○"}
 
+area_count = -1
+floor = 1
+
 
 class Room():
     # 部屋を定義したクラス
@@ -25,6 +29,8 @@ class Room():
         self.w = w
         self.h = h
 
+    def intro(self):
+        print(self.x, self.y, self.w, self.h)
 
 class Area():
     # エリアを定義したクラス
@@ -38,6 +44,24 @@ class Area():
     def intro(self):
         # デバッグ用の関数
         print(self.x, self.y, self.w, self.h)
+
+
+class Character():
+    def __init__(self, hp, max_hp, attack):
+        self.x = -1
+        self.y = -1
+        self.hp = hp
+        self.max_hp = max_hp
+        self.attack = attack
+
+    def set_random_position(self):
+        # その階層のどこかのエリアのランダムな場所にキャラクターの座標を移動させる
+        area_index = random.randint(0, area_count-1)
+        self.x = areas[area_index].room.x + random.randint(0, areas[area_index].room.w-1)
+        self.y = areas[area_index].room.y + random.randint(0, areas[area_index].room.h-1)
+
+    def intro(self):
+        print(self.x, self.y)
 
 
 def split_area(area_index):
@@ -125,25 +149,22 @@ def display_area():
         print('')
 
 
-if __name__ == '__main__':
-    # areas の初期化処理
-    areas = [0] * AREA_MAX
-    for i in range(0, AREA_MAX):
-        area = Area(0, 0, 0, 0)
-        areas[i] = area
+def set_random_position():
+    area_index = random.randint(0, area_count-1)
+    x = areas[area_index].room.x + random.randint(0, areas[area_index].room.w-1)
+    y = areas[area_index].room.y + random.randint(0, areas[area_index].room.h-1)
+    position = (x, y)
+    return position
 
-    # fieldの初期化処理
-    field = [[-1] * FIELD_WIDTH for i in range(FIELD_HEIGHT)]
-    # display_list(field)
 
-    # generate field 用の処理をとりあえず書く
+def generate_field():
     # 最初にマップ全体を覆うエリアを作ってそこから分割していくために全体を覆うエリアを初期化する
+    global area_count
     area_count = 0
     area = Area(0, 0, FIELD_WIDTH, FIELD_HEIGHT)
     areas[0] = area
     area_count += 1
     split_area(0)
-    # display_area()
     for y in range(FIELD_HEIGHT):
         for x in range(FIELD_WIDTH):
             field[y][x] = CELL_TYPE["WALL"]
@@ -160,7 +181,7 @@ if __name__ == '__main__':
                 field[y][x] = CELL_TYPE["NONE"]
 
         for x in range(areas[i].x, areas[i].x + areas[i].w):
-            field[areas[i].y + areas[i].h -1][x] = CELL_TYPE["NONE"]
+            field[areas[i].y + areas[i].h - 1][x] = CELL_TYPE["NONE"]
 
         for y in range(areas[i].y, areas[i].y + areas[i].h):
             field[y][areas[i].x + areas[i].w - 1] = CELL_TYPE["NONE"]
@@ -213,11 +234,72 @@ if __name__ == '__main__':
         if not filled:
             break
 
-    # drawField用の処理をとりあえず
+    player.set_random_position()
+    stair_position = set_random_position()
+    field[stair_position[1]][stair_position[0]] = CELL_TYPE["STAIRS"]
+
+
+def draw_field():
+    # とりあえずマップ全体を表示する関数　ゲーム中には使用しない予定
     os.system("cls")
+    print(str(floor) + 'F  turn:' + str(turn))
     for y in range(FIELD_HEIGHT):
         for x in range(FIELD_WIDTH):
-            print(field[y][x], end='')
+            if x == player.x and y == player.y:
+                print("＠", end='')
+            else:
+                print(field[y][x], end='')
         print('')
 
+    # デバッグ用にプレイヤーの座標とエリアと部屋の変数を表示させた
+    """player.intro()
+    for ac in range(area_count):
+        print(ac, end=': ')
+        areas[ac].intro()
+        areas[ac].room.intro()"""
 
+
+if __name__ == '__main__':
+    turn = 0
+    # player の初期化処理
+    player = Character(hp=15, max_hp=15, attack=3)
+
+    # areas の初期化処理
+    areas = [0] * AREA_MAX
+    for i in range(0, AREA_MAX):
+        area = Area(0, 0, 0, 0)
+        areas[i] = area
+
+    # fieldの初期化処理
+    field = [[-1] * FIELD_WIDTH for i in range(FIELD_HEIGHT)]
+
+    generate_field()
+
+    while True:
+        draw_field()
+
+        px = player.x
+        py = player.y
+
+        c = str(readchar.readkey())
+
+        if c == 'w':
+            py -= 1
+        elif c == 's':
+            py += 1
+        elif c == 'a':
+            px -= 1
+        elif c == 'd':
+            px += 1
+
+        next_cell = field[py][px]
+        if next_cell == CELL_TYPE["NONE"]:
+            player.x = px
+            player.y = py
+        elif next_cell == CELL_TYPE["WALL"]:
+            continue
+        elif next_cell == CELL_TYPE["STAIRS"]:
+            floor += 1
+            generate_field()
+
+        turn += 1
