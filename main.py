@@ -1,6 +1,7 @@
 import random
 import os
 import readchar
+import copy
 
 FIELD_WIDTH = 32
 FIELD_HEIGHT = 32
@@ -30,7 +31,9 @@ class Room():
         self.h = h
 
     def intro(self):
+        # デバッグ用
         print(self.x, self.y, self.w, self.h)
+
 
 class Area():
     # エリアを定義したクラス
@@ -46,21 +49,33 @@ class Area():
         print(self.x, self.y, self.w, self.h)
 
 
-class Character():
-    def __init__(self, hp, max_hp, attack):
+class DungeonObject():
+    def __init__(self):
+        self.x = -1
+        self.y = -1
+
+    def set_random_position(self):
+        area_index = random.randint(0, area_count - 1)
+        self.x = areas[area_index].room.x + random.randint(0, areas[area_index].room.w - 1)
+        self.y = areas[area_index].room.y + random.randint(0, areas[area_index].room.h - 1)
+
+
+class Character(DungeonObject):
+    def __init__(self, hp=-1, max_hp=-1, attack=-1):
         self.x = -1
         self.y = -1
         self.hp = hp
         self.max_hp = max_hp
         self.attack = attack
 
-    def set_random_position(self):
+    """def set_random_position(self):
         # その階層のどこかのエリアのランダムな場所にキャラクターの座標を移動させる
         area_index = random.randint(0, area_count-1)
         self.x = areas[area_index].room.x + random.randint(0, areas[area_index].room.w-1)
-        self.y = areas[area_index].room.y + random.randint(0, areas[area_index].room.h-1)
+        self.y = areas[area_index].room.y + random.randint(0, areas[area_index].room.h-1)"""
 
     def intro(self):
+        # デバッグ用
         print(self.x, self.y)
 
 
@@ -149,12 +164,13 @@ def display_area():
         print('')
 
 
-def set_random_position():
+"""def set_random_position():
+    # この関数はダンジョンオブジェクトクラスに実装したためもう使わない
     area_index = random.randint(0, area_count-1)
     x = areas[area_index].room.x + random.randint(0, areas[area_index].room.w-1)
     y = areas[area_index].room.y + random.randint(0, areas[area_index].room.h-1)
     position = (x, y)
-    return position
+    return position"""
 
 
 def generate_field():
@@ -235,20 +251,32 @@ def generate_field():
             break
 
     player.set_random_position()
-    stair_position = set_random_position()
-    field[stair_position[1]][stair_position[0]] = CELL_TYPE["STAIRS"]
+    stair.set_random_position()
+    if floor <= 4:
+        field[stair.y][stair.x] = CELL_TYPE["STAIRS"]
+    elif floor == 5:
+        field[stair.y][stair.x] = CELL_TYPE["AMULET"]
+
+    enemy.hp = 2 + floor
+    enemy.max_hp = 2 + floor
+    enemy.attack = 2 + floor
+    enemy.set_random_position()
 
 
 def draw_field():
     # とりあえずマップ全体を表示する関数　ゲーム中には使用しない予定
+    buffer = copy.deepcopy(field)
+
+    if player.hp > 0:
+        buffer[player.y][player.x] = CELL_TYPE["PLAYER"]
+    if enemy.hp > 0:
+        buffer[enemy.y][enemy.x] = CELL_TYPE["ENEMY"]
+
     os.system("cls")
-    print(str(floor) + 'F  turn:' + str(turn))
+    print(str(floor) + 'F  turn:' + str(turn) + '  HP ' + str(player.hp) + '/' + str(player.max_hp))
     for y in range(FIELD_HEIGHT):
         for x in range(FIELD_WIDTH):
-            if x == player.x and y == player.y:
-                print("＠", end='')
-            else:
-                print(field[y][x], end='')
+            print(buffer[y][x], end='')
         print('')
 
     # デバッグ用にプレイヤーの座標とエリアと部屋の変数を表示させた
@@ -259,10 +287,20 @@ def draw_field():
         areas[ac].room.intro()"""
 
 
+def get_room(x, y):
+    for area_num in range(area_count):
+        if areas[area_num].room.x <= x < areas[area_num].room.x + areas[area_num].room.w \
+                and areas[area_num].room.y <= y < areas[area_num].room.y + areas[area_num].room.h:
+            return area_num
+    return -1
+
+
 if __name__ == '__main__':
     turn = 0
     # player の初期化処理
     player = Character(hp=15, max_hp=15, attack=3)
+    enemy = Character()
+    stair = DungeonObject()
 
     # areas の初期化処理
     areas = [0] * AREA_MAX
@@ -292,14 +330,70 @@ if __name__ == '__main__':
         elif c == 'd':
             px += 1
 
-        next_cell = field[py][px]
-        if next_cell == CELL_TYPE["NONE"]:
-            player.x = px
-            player.y = py
-        elif next_cell == CELL_TYPE["WALL"]:
-            continue
-        elif next_cell == CELL_TYPE["STAIRS"]:
-            floor += 1
-            generate_field()
+        if enemy.hp > 0 and px == enemy.x and py == enemy.y:
+            print("シレンの攻撃！")
+            readchar.readkey()
+            damage = int(player.attack/2 + random.randint(0, player.attack+1))
+            enemy.hp -= damage
+            print("マムルLv" + str(floor) + "に" + str(damage) + "のダメージ！")
+            readchar.readkey()
+            if enemy.hp <= 0:
+                draw_field()
+                print("マムルLv" + str(floor) + "を倒した！")
+                readchar.readkey()
+
+        else:
+            next_cell = field[py][px]
+            if next_cell == CELL_TYPE["NONE"]:
+                player.x = px
+                player.y = py
+                if turn % 10 == 0 and player.hp < player.max_hp:
+                    player.hp += 1
+            elif next_cell == CELL_TYPE["WALL"]:
+                continue
+            elif next_cell == CELL_TYPE["STAIRS"]:
+                floor += 1
+                generate_field()
+            elif next_cell == CELL_TYPE["AMULET"]:
+                print("シレンはイェンダーの魔除けを手に入れた！")
+                print("～終～")
+                readchar.readkey()
+                break
+
+        if enemy.hp > 0:
+            room_num = get_room(enemy.x, enemy.y)
+            distance = abs(player.x - enemy.x) + abs(player.y - enemy.y)
+            if distance == 1:
+                draw_field()
+                print("マムルLv" + str(floor) + "の攻撃！")
+                readchar.readkey()
+                damage = int(enemy.attack/2 + random.randint(0, enemy.attack))
+                player.hp -= damage
+                print("シレンに" + str(damage) + "のダメージ！")
+                readchar.readkey()
+
+                if player.hp <= 0:
+                    draw_field()
+                    print("シレンは倒れた…")
+                    print("Game Over")
+                    readchar.readkey()
+                    break
+
+            elif (room_num >= 0 and room_num == get_room(player.x, player.y)) or distance == 2:
+                ex = enemy.x
+                ey = enemy.y
+
+                if ex < player.x:
+                    ex += 1
+                elif ex > player.x:
+                    ex -= 1
+                elif ey < player.y:
+                    ey += 1
+                elif ey > player.y:
+                    ey -= 1
+
+                if field[ey][ex] is not CELL_TYPE["WALL"]:
+                    enemy.x = ex
+                    enemy.y = ey
 
         turn += 1
