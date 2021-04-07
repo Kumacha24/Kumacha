@@ -17,7 +17,8 @@ CELL_TYPE = {"NONE": "．",
              "AMULET": "宝",
              "PLAYER": "＠",
              "ENEMY": "○",
-             "KUSA": "Ｗ"}
+             "KUSA": "Ｗ",
+             "FOOD": "▲"}
 
 area_count = -1
 floor = 1
@@ -52,20 +53,36 @@ class Area:
 
 class DungeonObject:
     # ダンジョンに配置されるものや人はこのクラスを親に持つことを想定している
-    def __init__(self):
+    def __init__(self, cell_type):
         self.x = -1
         self.y = -1
+        self.cell_type = cell_type
 
     def set_random_position(self):
         area_index = random.randint(0, area_count - 1)
         self.x = areas[area_index].room.x + random.randint(0, areas[area_index].room.w - 1)
         self.y = areas[area_index].room.y + random.randint(0, areas[area_index].room.h - 1)
 
+    def get_room(self):
+        # (x, y)が含まれる部屋の番号を返り値として返す、部屋ではなかった場合には-1を返す
+        for area_num in range(area_count):
+            if areas[area_num].room.x <= self.x < areas[area_num].room.x + areas[area_num].room.w \
+                    and areas[area_num].room.y <= self.y < areas[area_num].room.y + areas[area_num].room.h:
+                return area_num
+        return -1
+
+    def intro(self):
+        # デバッグ用
+        print(self.x, self.y)
+
+    def set_tile(self, map):
+        map[self.y][self.x] = self.cell_type
+
 
 class Character(DungeonObject):
     # ダンジョンオブジェクトクラスを親クラスに持つプレイヤーや敵などが該当するクラス
-    def __init__(self, hp=-1, max_hp=-1, attack=-1):
-        super().__init__()
+    def __init__(self, cell_type, hp=-1, max_hp=-1, attack=-1):
+        super().__init__(cell_type)
         self.hp = hp
         self.max_hp = max_hp
         self.attack = attack
@@ -76,25 +93,89 @@ class Character(DungeonObject):
         self.x = areas[area_index].room.x + random.randint(0, areas[area_index].room.w-1)
         self.y = areas[area_index].room.y + random.randint(0, areas[area_index].room.h-1)"""
 
-    def intro(self):
-        # デバッグ用
-        print(self.x, self.y)
+
+class Player(Character):
+    def __init__(self, cell_type=CELL_TYPE["PLAYER"], hp=-1, max_hp=-1, attack=-1, defence=0):
+        super().__init__(cell_type, hp, max_hp, attack)
+        # 満腹度 satiety
+        self.satiety = 100
+        self.max_satiety = 100
+        self.defence = defence
+
+    def open_menu(self):
+        while True:
+            os.system("cls")
+            print("アイテム一覧:アイテムを選んでください。戻る場合はqを押してください")
+            for item_num in range(len(player_items)):
+                print(item_num, player_items[item_num].name)
+            c = readchar.readkey()
+            if c == 'q':
+                return
+            elif is_int(c):
+                if int(c) < len(player_items):
+                    print(player_items[int(c)].name + "を 1.使用する, 2.置く, 3.説明を見る, q.戻る")
+                    chose_num = readchar.readkey()
+                    if chose_num == 'q':
+                        continue
+                    elif is_int(chose_num):
+                        if int(chose_num) == 1:
+                            self.use_item(player_items[int(c)])
+                            return
+                        elif int(chose_num) == 2:
+                            self.put_item_on_the_floor(player_items[int(c)])
+                            dungeon_objects.append(player_items[int(c)])
+                            del player_items[int(c)]
+                            return
+                        elif int(chose_num) == 3:
+                            player_items[int(c)].explain()
+                            continue
+
+    def use_item(self, item):
+        print(item.name + "を使用しますか？ y/n")
+        answer = readchar.readkey()
+        if answer == 'y':
+            item.use()
+            player_items.remove(item)
+            return
+        else:
+            pass
+
+    def battle(self):
+        pass
+
+    def stepping_on(self):
+        pass
+
+    def overlooking(self):
+        pass
+
+    def put_item_on_the_floor(self):
+        pass
 
 
 class Item(DungeonObject):
     # ダンジョンオブジェクトクラスを親に持つアイテムのクラス、とりあえず座標の初期化と名前を変数に持つ
-    def __init__(self, name):
-        super().__init__()
+    def __init__(self, name, cell_type):
+        super().__init__(cell_type)
         self.name = name
+
+    def explain(self):
+        os.system("cls")
+        print("これはアイテムです")
+        readchar.readkey()
 
 
 class Yakusou(Item):
     # Itemを親クラスに持つ薬草のクラス、アイテムをすべてクラスとして実装するかは未定
     def __init__(self):
-        super().__init__('薬草')
+        super().__init__('薬草', CELL_TYPE["KUSA"])
 
     def use(self):
         heal = 5
+        player.satiety += heal
+        if player.satiety > player.max_satiety:
+            player.satiety = player.max_satiety
+
         if player.hp + heal <= player.max_hp:
             player.hp += heal
             draw_field()
@@ -111,6 +192,40 @@ class Yakusou(Item):
             else:
                 print("シレンは" + str(heal) + "回復した！")
             readchar.readkey()
+
+
+class Takatobisou(Item):
+    def __init__(self):
+        super().__init__('高飛び草', CELL_TYPE["KUSA"])
+
+    def use(self):
+        player.satiety += 5
+        if player.satiety > player.max_satiety:
+            player.satiety = player.max_satiety
+        draw_field()
+        print("高飛び草を使用した！")
+        readchar.readkey()
+        player.set_random_position()
+        draw_field()
+
+
+class Onigiri(Item):
+    def __init__(self):
+        super().__init__('おにぎり', CELL_TYPE["FOOD"])
+
+    def use(self):
+        if player.satiety == player.max_satiety:
+            player.max_satiety += 5
+            player.satiety = player.max_satiety
+        player.satiety += 50
+        if player.satiety > player.max_satiety:
+            player.satiety = player.max_satiety
+        draw_field()
+        print("おにぎりを食べた！")
+        readchar.readkey()
+        print("シレンはお腹が膨れた")
+        readchar.readkey()
+        draw_field()
 
 
 def is_int(input_string):
@@ -296,32 +411,62 @@ def generate_field():
             break
 
     # ここからはダンジョンを生成し終わった後にプレイヤーや敵、アイテムや階段の初期座標を決めていく
-    player.set_random_position()
-    stair.set_random_position()
+    """stair.set_random_position()
     if floor <= 4:
         field[stair.y][stair.x] = CELL_TYPE["STAIRS"]
     elif floor == 5:
         field[stair.y][stair.x] = CELL_TYPE["AMULET"]
 
+    yakusou.set_random_position()
+    yakusou.set_tile()
+    field_items.append(yakusou)
+
+    takatobisou.set_random_position()
+    takatobisou.set_tile()
+    field_items.append(takatobisou)
+
+    onigiri.set_random_position()
+    onigiri.set_tile()
+    field_items.append(onigiri)
+
     enemy.hp = 2 + floor
     enemy.max_hp = 2 + floor
     enemy.attack = 2 + floor
-    enemy.set_random_position()
-    yakusou.set_random_position()
-    field[yakusou.y][yakusou.x] = CELL_TYPE["KUSA"]
+    enemy.set_random_position()"""
+
+    player.set_random_position()
+    for character in characters:
+        character.set_random_position()
+
+    for dungeon_object in dungeon_objects:
+        dungeon_object.set_random_position()
+        if dungeon_object.cell_type == CELL_TYPE["STAIRS"] and floor == 5:
+            dungeon_object.cell_type = CELL_TYPE["AMULET"]
+        dungeon_object.set_tile(field)
 
 
 def draw_field():
     # とりあえずマップ全体を表示する関数　ゲーム中には使用しない予定　カメラを実装するまではこれで行く
     buffer = copy.deepcopy(field)
 
+    """for game_object in game_objects:
+        if hasattr(game_object, 'hp'):
+            if game_object.hp < 0:
+                buffer[game_object.y][game_object.x] = CELL_TYPE["NONE"]"""
+
     if player.hp > 0:
         buffer[player.y][player.x] = CELL_TYPE["PLAYER"]
-    if enemy.hp > 0:
-        buffer[enemy.y][enemy.x] = CELL_TYPE["ENEMY"]
+
+    for character in characters:
+        if character.hp > 0:
+            character.set_tile(buffer)
+        elif character.hp <= 0:
+            buffer[character.y][character.x] = CELL_TYPE["NONE"]
+            characters.remove(character)
 
     os.system("cls")
-    print(str(floor) + 'F  turn:' + str(turn) + '  HP ' + str(player.hp) + '/' + str(player.max_hp))
+    print('{0}F  turn:{1}  HP {2}/{3}  満腹度：{4}'.format(str(floor), str(turn), str(player.hp), str(player.max_hp),
+                                                       str(player.satiety)))
     for y in range(FIELD_HEIGHT):
         for x in range(FIELD_WIDTH):
             print(buffer[y][x], end='')
@@ -337,44 +482,54 @@ def draw_field():
 
 def draw_menu():
     # プレイヤーがメニューを開いたときに描画する関数
+    # プレイヤークラスが持つメソッドに変更したためこの関数は今後使用しない可能性が高い
     while True:
         os.system("cls")
         print("アイテム一覧:使用するアイテムを選んでください。戻る場合はqを押してください")
-        for item_num in range(len(items)):
-            print(item_num, items[item_num].name)
+        for item_num in range(len(player_items)):
+            print(item_num, player_items[item_num].name)
         c = readchar.readkey()
         if c == 'q':
             return
         elif is_int(c):
-            if int(c) < len(items):
-                print(items[int(c)].name + "を使用しますか？ y/n")
+            if int(c) < len(player_items):
+                print(player_items[int(c)].name + "を使用しますか？ y/n")
                 answer = readchar.readkey()
                 if answer == 'y':
-                    items[int(c)].use()
-                    del items[int(c)]
+                    player_items[int(c)].use()
+                    del player_items[int(c)]
                     return
                 else:
                     continue
 
 
-def get_room(x, y):
-    # (x, y)が含まれる部屋の番号を返り値として返す、部屋ではなかった場合には-1を返す
-    for area_num in range(area_count):
-        if areas[area_num].room.x <= x < areas[area_num].room.x + areas[area_num].room.w \
-                and areas[area_num].room.y <= y < areas[area_num].room.y + areas[area_num].room.h:
-            return area_num
-    return -1
+def generate_dungeon_object_list():
+    enemy = Character(CELL_TYPE["ENEMY"], 2+floor, 2+floor, 1+floor)
+    stair = DungeonObject(CELL_TYPE["STAIRS"])
+    yakusou = Yakusou()
+    takatobisou = Takatobisou()
+    onigiri = Onigiri()
+    dungeon_objects = [stair, yakusou, takatobisou, onigiri]
+    characters = [enemy]
+
+    return dungeon_objects, characters
 
 
 if __name__ == '__main__':
     # ゲーム内で用いる変数等の初期化処理を行う
     turn = 0
     # player の初期化処理
-    player = Character(hp=15, max_hp=15, attack=3)
-    enemy = Character()
-    stair = DungeonObject()
+    player = Player(hp=15, max_hp=15, attack=3)
+    # generate_dungeon_object_list関数のテストのためにコメントアウト
+    """enemy = Character(CELL_TYPE["ENEMY"])
+    stair = DungeonObject(CELL_TYPE["STAIRS"])
     yakusou = Yakusou()
-    items = []
+    takatobisou = Takatobisou()
+    onigiri = Onigiri()"""
+
+    # 左からダンジョン内のアイテムや階段などの動かないもの、キャラクター等の動くものをまとめたリスト
+    dungeon_objects, characters = generate_dungeon_object_list()
+    player_items = []  # プレイヤーが現在所持しているアイテムを集めたリスト
 
     # areas の初期化処理
     areas = [0] * AREA_MAX
@@ -406,86 +561,124 @@ if __name__ == '__main__':
         elif c == 'd':
             px += 1
         elif c == 'm':
-            draw_menu()
+            # draw_menu()
+            player.open_menu()
             continue
 
         # 戦闘処理
-        if enemy.hp > 0 and px == enemy.x and py == enemy.y:
-            print("シレンの攻撃！")
-            readchar.readkey()
-            damage = int(player.attack/2 + random.randint(0, player.attack+1))
-            enemy.hp -= damage
-            print("マムルLv" + str(floor) + "に" + str(damage) + "のダメージ！")
-            readchar.readkey()
-            if enemy.hp <= 0:
-                draw_field()
-                print("マムルLv" + str(floor) + "を倒した！")
-                readchar.readkey()
+        battle = False
+        if len(characters) > 0:
+            for enemy in characters:
+                if enemy.hp > 0 and px == enemy.x and py == enemy.y:
+                    print("シレンの攻撃！")
+                    readchar.readkey()
+                    damage = int(player.attack / 2 + random.randint(0, player.attack + 1))
+                    enemy.hp -= damage
+                    print("マムルLv" + str(floor) + "に" + str(damage) + "のダメージ！")
+                    readchar.readkey()
+                    if enemy.hp <= 0:
+                        draw_field()
+                        print("マムルLv" + str(floor) + "を倒した！")
+                        readchar.readkey()
+                    battle = True
 
-        # 戦闘がおこらなかった時の処理
-        else:
+        # 戦闘がおこらなかった時の処理 プレイヤーの移動先の座標のタイルのタイプによって分岐する
+        if not battle:
             next_cell = field[py][px]
+            # 移動先に何もなければプレイヤーを移動させる　１０ターンに１回回復する
             if next_cell == CELL_TYPE["NONE"]:
                 player.x = px
                 player.y = py
                 if turn % 10 == 0 and player.hp < player.max_hp:
                     player.hp += 1
+            # 移動先に壁がある場合はターンを進めずメインループをもう一度回す
             elif next_cell == CELL_TYPE["WALL"]:
                 continue
+            # 移動先に階段がある場合はfloorを１増やして次の階層を自動生成する
             elif next_cell == CELL_TYPE["STAIRS"]:
                 floor += 1
+                dungeon_objects, characters = generate_dungeon_object_list()
                 generate_field()
+            # 移動先に宝がある場合はゲームのクリア処理を行う
             elif next_cell == CELL_TYPE["AMULET"]:
                 print("シレンはイェンダーの魔除けを手に入れた！")
                 print("～終～")
                 readchar.readkey()
                 break
-            elif next_cell == CELL_TYPE["KUSA"]:
+            # 移動先にアイテムがある場合は移動してアイテムを拾うという処理を行う
+            else:
                 player.x = px
                 player.y = py
                 field[py][px] = CELL_TYPE["NONE"]
                 draw_field()
-                print("シレンは薬草を拾った！")
-                items.append(yakusou)
-                readchar.readkey()
+
+                # フィールド上にあるアイテムのうちプレイヤーの移動先にあるアイテムがどれかを判別しプレイヤーの持ち物に加える処理を行う
+                for item in dungeon_objects:
+                    if px == item.x and py == item.y:
+                        print("シレンは" + item.name + "を拾った！")
+                        player_items.append(item)
+                        readchar.readkey()
+                        dungeon_objects.remove(item)
 
         # プレイヤーのターンが終わり敵側の処理に移る　ここでのアルゴリズムではプレイヤーとの距離に応じて戦闘か移動処理を行う
-        if enemy.hp > 0:
-            room_num = get_room(enemy.x, enemy.y)
-            distance = abs(player.x - enemy.x) + abs(player.y - enemy.y)
-            # 距離が1マスしか離れていないときには戦闘処理を行う
-            if distance == 1:
-                draw_field()
-                print("マムルLv" + str(floor) + "の攻撃！")
-                readchar.readkey()
-                damage = int(enemy.attack/2 + random.randint(0, enemy.attack))
-                player.hp -= damage
-                print("シレンに" + str(damage) + "のダメージ！")
-                readchar.readkey()
-
-                if player.hp <= 0:
+        for enemy in characters:
+            if enemy.hp > 0:
+                room_num = enemy.get_room()
+                distance = abs(player.x - enemy.x) + abs(player.y - enemy.y)
+                # 距離が1マスしか離れていないときには戦闘処理を行う
+                if distance == 1:
                     draw_field()
-                    print("シレンは倒れた…")
-                    print("Game Over")
+                    print("マムルLv" + str(floor) + "の攻撃！")
                     readchar.readkey()
-                    break
+                    damage = int(enemy.attack / 2 + random.randint(0, enemy.attack) - random.randint(0, player.defence))
+                    player.hp -= damage
+                    print("シレンに" + str(damage) + "のダメージ！")
+                    readchar.readkey()
 
-            # プレイヤーと敵が同じ部屋にいるか２マスだけ離れている場合は敵がプレイヤーに近づくように移動を行う
-            elif (room_num >= 0 and room_num == get_room(player.x, player.y)) or distance == 2:
-                ex = enemy.x
-                ey = enemy.y
+                # プレイヤーと敵が同じ部屋にいるか２マスだけ離れている場合は敵がプレイヤーに近づくように移動を行う
+                elif (room_num >= 0 and room_num == player.get_room()) or distance == 2:
+                    ex = enemy.x
+                    ey = enemy.y
 
-                if ex < player.x:
-                    ex += 1
-                elif ex > player.x:
-                    ex -= 1
-                elif ey < player.y:
-                    ey += 1
-                elif ey > player.y:
-                    ey -= 1
+                    if ex < player.x:
+                        ex += 1
+                    elif ex > player.x:
+                        ex -= 1
+                    elif ey < player.y:
+                        ey += 1
+                    elif ey > player.y:
+                        ey -= 1
 
-                if field[ey][ex] is not CELL_TYPE["WALL"]:
-                    enemy.x = ex
-                    enemy.y = ey
+                    if field[ey][ex] is not CELL_TYPE["WALL"]:
+                        enemy.x = ex
+                        enemy.y = ey
 
         turn += 1
+
+        # 満腹度の処理を追加
+        if turn % 5 == 0:
+            if player.satiety > 0:
+                player.satiety -= 1
+            if player.satiety == 20:
+                draw_field()
+                print("シレンはお腹が空いてきた")
+                readchar.readkey()
+            elif player.satiety == 10:
+                draw_field()
+                print("シレンはお腹が空きすぎて倒れそうだ")
+                readchar.readkey()
+            elif player.satiety == 0:
+                draw_field()
+                print("何か食べないと死んでしまう！")
+                readchar.readkey()
+
+        if player.satiety == 0:
+            player.hp -= 1
+
+        # プレイヤーの死亡処理
+        if player.hp <= 0:
+            draw_field()
+            print("シレンは倒れた…")
+            print("Game Over")
+            readchar.readkey()
+            break
