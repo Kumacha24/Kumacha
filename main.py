@@ -18,7 +18,15 @@ CELL_TYPE = {"NONE": "．",
              "PLAYER": "＠",
              "ENEMY": "○",
              "KUSA": "Ｗ",
-             "FOOD": "▲"}
+             "FOOD": "▲",
+             "SWORD": "剣",
+             "SHIELD": "盾"}
+
+ITEM_TYPE = {"GRASS": 0,
+             "FOOD": 1,
+             "EQUIPMENT": 2,
+             "CANE": 3,
+             "SCROLL": 4}
 
 area_count = -1
 floor = 1
@@ -131,14 +139,32 @@ class Player(Character):
                             continue
 
     def use_item(self, item):
-        print(item.name + "を使用しますか？ y/n")
-        answer = readchar.readkey()
-        if answer == 'y':
-            item.use()
-            player_items.remove(item)
-            return
+        if item.item_type == ITEM_TYPE["EQUIPMENT"]:
+            if not item.equipped:
+                print(item.name + "を装備しますか？　y/n")
+                answer = readchar.readkey()
+                if answer == 'y':
+                    item.equip()
+                    return
+                else:
+                    pass
+            else:
+                print(item.name + "を外しますか？　y/n")
+                answer = readchar.readkey()
+                if answer == 'y':
+                    item.equip()
+                    return
+                else:
+                    pass
         else:
-            pass
+            print(item.name + "を使用しますか？ y/n")
+            answer = readchar.readkey()
+            if answer == 'y':
+                item.use()
+                player_items.remove(item)
+                return
+            else:
+                pass
 
     def battle(self):
         pass
@@ -155,9 +181,10 @@ class Player(Character):
 
 class Item(DungeonObject):
     # ダンジョンオブジェクトクラスを親に持つアイテムのクラス、とりあえず座標の初期化と名前を変数に持つ
-    def __init__(self, name, cell_type):
+    def __init__(self, name, cell_type, item_type):
         super().__init__(cell_type)
         self.name = name
+        self.item_type = item_type
 
     def explain(self):
         os.system("cls")
@@ -166,9 +193,9 @@ class Item(DungeonObject):
 
 
 class Yakusou(Item):
-    # Itemを親クラスに持つ薬草のクラス、アイテムをすべてクラスとして実装するかは未定
+    # Itemを親クラスに持つ薬草のクラス、アイテムをすべてクラスとして実装するかは未定.プレイヤーの体力を回復させる効果を持つ
     def __init__(self):
-        super().__init__('薬草', CELL_TYPE["KUSA"])
+        super().__init__('薬草', CELL_TYPE["KUSA"], ITEM_TYPE["GRASS"])
 
     def use(self):
         heal = 5
@@ -195,8 +222,9 @@ class Yakusou(Item):
 
 
 class Takatobisou(Item):
+    # 草系アイテムの一つ。使用したキャラクターをランダムな部屋のランダムな位置に移動させる。
     def __init__(self):
-        super().__init__('高飛び草', CELL_TYPE["KUSA"])
+        super().__init__('高飛び草', CELL_TYPE["KUSA"], ITEM_TYPE["GRASS"])
 
     def use(self):
         player.satiety += 5
@@ -210,8 +238,9 @@ class Takatobisou(Item):
 
 
 class Onigiri(Item):
+    # プレイヤーの満腹度を回復させる。満腹度が最大の場合は最大値を上昇させる。
     def __init__(self):
-        super().__init__('おにぎり', CELL_TYPE["FOOD"])
+        super().__init__('おにぎり', CELL_TYPE["FOOD"], ITEM_TYPE["FOOD"])
 
     def use(self):
         if player.satiety == player.max_satiety:
@@ -226,6 +255,59 @@ class Onigiri(Item):
         print("シレンはお腹が膨れた")
         readchar.readkey()
         draw_field()
+
+
+class Sword(Item):
+    # 剣を定義したクラス、このゲーム初の装備することができるアイテム
+    def __init__(self):
+        super().__init__('剣', CELL_TYPE["SWORD"], ITEM_TYPE["EQUIPMENT"])
+        self.power = 1
+        self.equipped = False
+
+    def equip(self):
+        if not self.equipped:
+            player.attack += self.power
+            self.name = 'E:剣'
+            self.equipped = True
+            draw_field()
+            print("シレンは剣を装備した！")
+            readchar.readkey()
+            print("シレンは攻撃力が" + str(self.power) + "上がった！")
+            readchar.readkey()
+            draw_field()
+        else:
+            player.attack -= self.power
+            self.name = '剣'
+            self.equipped = False
+            print("シレンは剣をしまった")
+            readchar.readkey()
+            draw_field()
+
+
+class Shield(Item):
+    # 盾を定義したクラス。プレイヤーの防御力を上げてくれる
+    def __init__(self):
+        super().__init__('盾', CELL_TYPE["SHIELD"], ITEM_TYPE["EQUIPMENT"])
+        self.defence = 1
+        self.equipped = False
+
+    def equip(self):
+        if not self.equipped:
+            player.defence += self.defence
+            self.name = 'E:盾'
+            self.equipped = True
+            print("シレンは盾を装備した！")
+            readchar.readkey()
+            print("シレンは防御力が" + str(self.defence) + "上がった！")
+            readchar.readkey()
+            draw_field()
+        else:
+            player.defence -= self.defence
+            self.name = '盾'
+            self.equipped = False
+            print("シレンは盾をしまった")
+            readchar.readkey()
+            draw_field()
 
 
 def is_int(input_string):
@@ -465,8 +547,8 @@ def draw_field():
             characters.remove(character)
 
     os.system("cls")
-    print('{0}F  turn:{1}  HP {2}/{3}  満腹度：{4}'.format(str(floor), str(turn), str(player.hp), str(player.max_hp),
-                                                       str(player.satiety)))
+    print(
+        f'{str(floor)}F  turn:{str(turn)}  HP {str(player.hp)}/{str(player.max_hp)}  満腹度：{str(player.satiety)}  攻撃力:{str(player.attack)} 防御力:{str(player.defence)}')
     for y in range(FIELD_HEIGHT):
         for x in range(FIELD_WIDTH):
             print(buffer[y][x], end='')
@@ -504,13 +586,9 @@ def draw_menu():
 
 
 def generate_dungeon_object_list():
-    enemy = Character(CELL_TYPE["ENEMY"], 2+floor, 2+floor, 1+floor)
-    stair = DungeonObject(CELL_TYPE["STAIRS"])
-    yakusou = Yakusou()
-    takatobisou = Takatobisou()
-    onigiri = Onigiri()
-    dungeon_objects = [stair, yakusou, takatobisou, onigiri]
-    characters = [enemy]
+    # ダンジョン内のオブジェクトのリストを作成してリストを二つ戻り値として与える関数
+    dungeon_objects = [DungeonObject(CELL_TYPE["STAIRS"]), Yakusou(), Takatobisou(), Onigiri(), Sword(), Shield()]
+    characters = [Character(CELL_TYPE["ENEMY"], 2+floor, 2+floor, 1+floor)]
 
     return dungeon_objects, characters
 
