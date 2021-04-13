@@ -2,6 +2,7 @@ import random
 import os
 import readchar
 import copy
+import pickle
 
 FIELD_WIDTH = 32
 FIELD_HEIGHT = 32
@@ -59,6 +60,16 @@ class Area:
         # デバッグ用の関数
         print(self.x, self.y, self.w, self.h)
 
+    def save(self):
+        return [self.x, self.y, self.w, self.h, self.room.x, self.room.y, self.room.w, self.room.h]
+
+    def load(self, save_data):
+        self.x = save_data[0]
+        self.y = save_data[1]
+        self.w = save_data[2]
+        self.h = save_data[3]
+        self.room = Room(save_data[4], save_data[5], save_data[6], save_data[7])
+
 
 class DungeonObject:
     # ダンジョンに配置されるものや人はこのクラスを親に持つことを想定している
@@ -86,6 +97,13 @@ class DungeonObject:
 
     def set_tile(self, map):
         map[self.y][self.x] = self.cell_type
+
+    def save(self):
+        return [self.x, self.y]
+
+    def load(self, save_data):
+        self.x = save_data[0]
+        self.y = save_data[1]
 
 
 class Character(DungeonObject):
@@ -231,6 +249,19 @@ class Player(Character):
         dungeon_objects[-1].set_tile(field)
         player_items.remove(item)
 
+    def save(self):
+        return [self.x, self.y, self.hp, self.max_hp, self.attack, self.defence, self.satiety, self.max_satiety]
+
+    def load(self, save_data):
+        self.x = save_data[0]
+        self.y = save_data[1]
+        self.hp = save_data[2]
+        self.max_hp = save_data[3]
+        self.attack = save_data[4]
+        self.defence = save_data[5]
+        self.satiety = save_data[6]
+        self.max_satiety = save_data[7]
+
 
 class Item(DungeonObject):
     # ダンジョンオブジェクトクラスを親に持つアイテムのクラス、とりあえず座標の初期化と名前を変数に持つ
@@ -287,6 +318,32 @@ class Takatobisou(Item):
         print("高飛び草を使用した！")
         readchar.readkey()
         player.set_random_position()
+        draw_field()
+
+
+class Hukkatusou(Item):
+    # 草系アイテムの一つ。プレイヤーのhpが0以下になったときに発動し、hpと満腹度を最大値まで上昇させて復活させる
+    def __init__(self):
+        super().__init__('復活草', CELL_TYPE["KUSA"], ITEM_TYPE["GRASS"])
+
+    def use(self):
+        player.satiety += 5
+        if player.satiety > player.max_satiety:
+            player.satiety = player.max_satiety
+        draw_field()
+        print("復活草を使用した！")
+        readchar.readkey()
+        print("このアイテムは力尽きたときに自動で復活してくれるアイテムなので飲まずに持っておこう")
+        readchar.readkey()
+        draw_field()
+
+    def resurrection(self):
+        draw_field()
+        player.hp = player.max_hp
+        player.satiety = player.max_satiety
+        print("持っていた復活草が不思議な力でシレンを復活させた！")
+        print("シレンの体力は満タンだ！")
+        readchar.readkey()
         draw_field()
 
 
@@ -463,13 +520,47 @@ def display_area():
         print('')
 
 
-"""def set_random_position():
-    # この関数はダンジョンオブジェクトクラスに実装したためもう使わない
-    area_index = random.randint(0, area_count-1)
-    x = areas[area_index].room.x + random.randint(0, areas[area_index].room.w-1)
-    y = areas[area_index].room.y + random.randint(0, areas[area_index].room.h-1)
-    position = (x, y)
-    return position"""
+def save():
+    # この関数を呼び出した時点でのデータをセーブしてsave_data.binに保存する
+    area_data = [area_count]
+    for ac in range(area_count):
+        area_data.append(areas[ac].save())
+
+    save_data = [player.save(), field, turn, floor, area_data, dungeon_objects, characters]
+
+    fp = open('save_data.bin', 'wb')
+    pickle.dump(save_data, fp)
+    fp.close()
+
+
+def load():
+    # save_data.binファイルを読み込んでその中の情報を復元することによってセーブ時点での状態に戻す
+    global field, turn, floor, area_count, areas, dungeon_objects, characters
+    fp = open('save_data.bin', 'rb')
+    save_data = pickle.load(fp)
+    fp.close()
+
+    player.load(save_data[0])
+    field = save_data[1]
+    turn = save_data[2]
+    floor = save_data[3]
+
+    area_count = save_data[4][0]
+    for ac in range(area_count):
+        areas[ac].load(save_data[4][ac+1])
+
+    dungeon_objects.clear()
+    dungeon_objects = save_data[5]
+
+    characters.clear()
+    characters = save_data[6]
+    # dungeon_objectsの中身をデータを読み出して代入する処理からオブジェクトのコピーを保存してそれを代入することでセーブ前のものと一緒のデータにした
+    # ため、下のコメントアウトした部分は使わない
+    """dungeon_objects.append(DungeonObject(CELL_TYPE["STAIRS"]))
+    for c in range(len(save_data[5])):
+        dungeon_objects.append(dungeon_object_list[save_data[5][c]])
+        dungeon_objects[c].load(save_data[6][c])"""
+    draw_field()
 
 
 def generate_field():
@@ -608,9 +699,13 @@ def draw_menu():
                     continue
 
 
-def generate_dungeon_object_list():
+def generate_dungeon_object_list(amount=6):
     # ダンジョン内のオブジェクトのリストを作成してリストを二つ戻り値として与える関数
-    dungeon_objects = [DungeonObject(CELL_TYPE["STAIRS"]), Yakusou(), Takatobisou(), Onigiri(), Sword(), Shield()]
+    dungeon_objects = []
+    dungeon_objects.append(DungeonObject(CELL_TYPE["STAIRS"]))
+    for count in range(amount):
+        random_number = random.randint(0, len(dungeon_object_list)-1)
+        dungeon_objects.append(copy.deepcopy(dungeon_object_list[random_number]))
     characters = [Character(CELL_TYPE["ENEMY"], 2+floor, 2+floor, 1+floor), Character(CELL_TYPE["ENEMY"], 2+floor, 2+floor, 1+floor)]
 
     return dungeon_objects, characters
@@ -621,10 +716,15 @@ if __name__ == '__main__':
     turn = 0
     # player の初期化処理
     player = Player(hp=15, max_hp=15, attack=3)
+    # ダンジョンにおけるアイテムをリスト化したもの
+    dungeon_object_list = [Yakusou(), Takatobisou(), Hukkatusou(), Onigiri(), Sword(), Shield()]
 
     # 左からダンジョン内のアイテムや階段などの動かないもの、キャラクター等の動くものをまとめたリスト
     dungeon_objects, characters = generate_dungeon_object_list()
     player_items = []  # プレイヤーが現在所持しているアイテムを集めたリスト
+
+    # 乱数の初期化
+    random.seed()
 
     # areas の初期化処理
     areas = [0] * AREA_MAX
@@ -635,6 +735,7 @@ if __name__ == '__main__':
     # fieldの初期化処理
     field = [[-1] * FIELD_WIDTH for i in range(FIELD_HEIGHT)]
 
+    # ゲーム開始時の１Ｆ部分のマップの作製
     generate_field()
 
     # ゲーム部分のメインループ
@@ -645,6 +746,7 @@ if __name__ == '__main__':
         py = player.y
 
         # ここでユーザーにキーボード入力させwasdで移動を行いmでメニューを開けるようにしたスペースキーで足踏みをできるようにした
+        # <でセーブ, >でロードを行う
         c = str(readchar.readkey())
 
         if c == 'w':
@@ -660,6 +762,16 @@ if __name__ == '__main__':
             continue
         elif c == ' ':
             player.stepping_on()
+        elif c == ',':
+            save()
+            print('現在の状況をセーブしました')
+            readchar.readkey()
+            continue
+        elif c == '.':
+            load()
+            print('セーブデータをロードしました')
+            readchar.readkey()
+            continue
 
         # 戦闘処理
         battle = False
@@ -771,10 +883,19 @@ if __name__ == '__main__':
         if player.satiety == 0:
             player.hp -= 1
 
-        # プレイヤーの死亡処理
+        # プレイヤーの死亡判定と復活草を持っているときは復活処理、そうでないときは死亡処理を行う
         if player.hp <= 0:
-            draw_field()
-            print("シレンは倒れた…")
-            print("Game Over")
-            readchar.readkey()
-            break
+            # プレイヤーの復活
+            for item in player_items:
+                if item.name == '復活草':
+                    item.resurrection()
+                    player_items.remove(item)
+                    break
+
+            # プレイヤーの死亡処理
+            if player.hp <= 0:
+                draw_field()
+                print("シレンは倒れた…")
+                print("Game Over")
+                readchar.readkey()
+                break
